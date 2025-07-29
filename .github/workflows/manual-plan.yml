@@ -1,0 +1,48 @@
+name: Manual Terraform Plan workflow
+
+on:
+    workflow_dispatch:
+        inputs:
+            action-apply:
+                description: "Apply if true, Plan default"
+                required: true
+                default: "false"
+                type: choice
+                options:
+                    - "true"
+                    - "false"
+jobs:
+    terraform:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: run terraform plan
+              run: terraform plan -no-color > plan.txt
+
+            - name: Post terraform plan as sticky comment
+              uses: marocchino/sticky-pull-request-comment@v2
+              with:
+                header: "Terraform Plan"
+                path: plan.txt
+
+            - name: Generate AI Review
+              run: |
+                SUMMARY=$(curl -s https://api.openai.com/v1/chat/completions \
+                -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+                -H "Content-Type: application/json" \
+                -d '{
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role":"system","content":"You are a Terraform reviewer."},
+                    {"role":"user","content":"Summarize and highlight risks in this plan:\n'$(cat plan.txt)'"}
+                    ]
+                    }' | jq -r '.choices[0].message.content')
+                echo "$SUMMARY" > summary.txt
+
+            - name: Post AI Review as sticky comment
+              uses: marocchino/sticky-pull-request-comment@v2
+              with:
+                header: "AI Review"
+                path: summary.txt

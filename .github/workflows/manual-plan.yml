@@ -18,6 +18,9 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v4
 
+            - name: run terraform init
+              run: terraform init
+
             - name: run terraform plan
               run: terraform plan -no-color > plan.txt
 

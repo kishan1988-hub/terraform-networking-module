@@ -1,4 +1,4 @@
-name: Manual Terraform Plan AI Review
+name: Manual Terraform Plan Review
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
 
 jobs:
   terraform:
-    runs-on: self-hosted   # your local runner
+    runs-on: self-hosted   # use your local runner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,22 +38,28 @@ jobs:
 
       - name: Prepare Trimmed Plan
         run: |
-          # Limit the plan to the first 300 lines for safe API call
+          # Trim to first 300 lines for safety
           head -n 300 plan.txt > plan_trimmed.txt
 
       - name: Generate AI Review
         run: |
-          PLAN=$(jq -Rs . < plan_trimmed.txt)
+          # Build safe JSON payload using jq
+          jq -n \
+            --arg model "gpt-4o-mini" \
+            --arg system "You are a Terraform plan reviewer. Summarize infrastructure changes clearly. Group them as Adds, Changes, or Destroys, and note risks/costs." \
+            --arg plan "Here is the Terraform plan:\n$(cat plan_trimmed.txt)" \
+            '{
+              model: $model,
+              messages: [
+                {role: "system", content: $system},
+                {role: "user", content: $plan}
+              ]
+            }' > payload.json
+
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"gpt-4o-mini\",
-              \"messages\": [
-                {\"role\":\"system\",\"content\":\"You are a Terraform plan reviewer. Summarize infrastructure changes clearly. Group them as Adds, Changes, or Destroys, and note risks/costs.\"},
-                {\"role\":\"user\",\"content\":\"Here is the Terraform plan:\n$PLAN\"}
-              ]
-            }")
+            -d @payload.json)
 
           BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)

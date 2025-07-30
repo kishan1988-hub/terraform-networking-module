@@ -38,29 +38,41 @@ jobs:
 
       - name: Generate AI Review
         run: |
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
+            set -euo pipefail
+
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{
-              "model": "gpt-4o-mini",
-              "messages": [
-                {"role":"system","content":"You are a Terraform plan reviewer. Write a clear, human-friendly summary of infrastructure changes. Focus on resources added, changed, or destroyed, and call out risks/costs."},
-                {"role":"user","content":"Here is the Terraform plan:\n'$(cat plan.txt)'"}
-              ]
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role":"system","content":"You are a Terraform plan reviewer. Write a clear, human-friendly summary of infrastructure changes. Focus on resources added, changed, or destroyed, and call out risks/costs."},
+                    {"role":"user","content":"Here is the Terraform plan:\n'$(cat plan.txt)'"}
+                 ]
             }')
 
-          BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
-          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+            BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
+            STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
 
-          if [ "$STATUS" != "200" ]; then
-            echo "❌ OpenAI API call failed with status $STATUS"
-            echo "Response: $BODY"
-            echo "AI Review could not be generated." > summary.txt
-            exit 0
-          fi
+            echo "HTTP status: $STATUS"
+            echo "Raw response: $BODY"
 
-          echo "$BODY" | jq -r '.choices[0].message.content' > summary.txt
-          echo "✅ AI Review generated successfully"
+            if [ "$STATUS" != "200" ]; then
+                echo "❌ OpenAI API call failed with status $STATUS"
+                echo "$BODY" > summary.txt
+                exit 0
+            fi
+
+            PARSED=$(echo "$BODY" | jq -r '.choices[0].message.content // empty')
+
+            if [ -z "$PARSED" ]; then
+                echo "⚠️ No content parsed from OpenAI response"
+                echo "$BODY" > summary.txt
+            else
+                echo "$PARSED" > summary.txt
+            fi
+
+            echo "✅ AI Review step completed"
 
       - name: Show Plan + AI Review in GitHub Actions Summary
         run: |

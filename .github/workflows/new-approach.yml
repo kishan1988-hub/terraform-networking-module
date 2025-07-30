@@ -1,0 +1,82 @@
+name: Manual Terraform Plan AI Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      action-apply:
+        description: "Apply if true, Plan default"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  terraform:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -no-color > plan.txt
+
+      - name: Ensure jq is installed
+        run: |
+          if ! command -v jq &> /dev/null; then
+            echo "jq not found, installing..."
+            if [ "$(uname)" == "Darwin" ]; then
+              brew install jq
+            else
+              sudo apt-get update && sudo apt-get install -y jq
+            fi
+          fi
+
+      - name: Generate AI Review
+        run: |
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [
+                {"role":"system","content":"You are a Terraform plan reviewer. Write a clear, human-friendly summary of infrastructure changes. Focus on resources added, changed, or destroyed, and call out risks/costs."},
+                {"role":"user","content":"Here is the Terraform plan:\n'$(cat plan.txt)'"}
+              ]
+            }')
+
+          BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ OpenAI API call failed with status $STATUS"
+            echo "Response: $BODY"
+            echo "AI Review could not be generated." > summary.txt
+            exit 0
+          fi
+
+          echo "$BODY" | jq -r '.choices[0].message.content' > summary.txt
+          echo "✅ AI Review generated successfully"
+
+      - name: Show Plan + AI Review in GitHub Actions Summary
+        run: |
+          echo "## Terraform Raw Plan" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat plan.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## AI Human-Readable Review" >> $GITHUB_STEP_SUMMARY
+          cat summary.txt >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Plan & Review as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-review
+          path: |
+            plan.txt
+            summary.txt

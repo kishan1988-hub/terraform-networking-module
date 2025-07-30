@@ -49,18 +49,45 @@ jobs:
             #   with:
             #     header: "AI Review"
             #     path: summary.txt
-            - name: Show AI Review in GitHub Actions Summary
-              run: |
-                echo "## Terraform Plan" >> $GITHUB_STEP_SUMMARY
-                cat plan.txt >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "## AI Review" >> $GITHUB_STEP_SUMMARY
-                cat summary.txt >> $GITHUB_STEP_SUMMARY
+            # - name: Show AI Review in GitHub Actions Summary
+            #   run: |
+            #     echo "## Terraform Plan" >> $GITHUB_STEP_SUMMARY
+            #     cat plan.txt >> $GITHUB_STEP_SUMMARY
+            #     echo "" >> $GITHUB_STEP_SUMMARY
+            #     echo "## AI Review" >> $GITHUB_STEP_SUMMARY
+            #     cat summary.txt >> $GITHUB_STEP_SUMMARY
 
-            - name: Upload Plan & Review as Artifact
-              uses: actions/upload-artifact@v4
-              with:
-                name: terraform-review
-                path: |
-                  plan.txt
-                  summary.txt
+            # - name: Upload Plan & Review as Artifact
+            #   uses: actions/upload-artifact@v4
+            #   with:
+            #     name: terraform-review
+            #     path: |
+            #       plan.txt
+            #       summary.txt
+            - name: Generate AI Review
+              run: |
+                RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
+                -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+                -H "Content-Type: application/json" \
+                -d '{
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role":"system","content":"You are a Terraform reviewer. Highlight risks and cost impacts."},
+                    {"role":"user","content":"Summarize this Terraform plan:\n'$(cat plan.txt)'"}
+                       ]
+                     }')
+
+                # Split body and status
+                 BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
+                 STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+                if [ "$STATUS" != "200" ]; then
+                    echo "❌ OpenAI API call failed with status $STATUS"
+                    echo "Response: $BODY"
+                    echo "AI Review could not be generated." > summary.txt
+                    exit 0
+                fi
+
+                echo "$BODY" | jq -r '.choices[0].message.content' > summary.txt
+
+                echo "✅ AI Review generated successfully"

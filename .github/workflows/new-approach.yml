@@ -14,7 +14,7 @@ on:
 
 jobs:
   terraform:
-    runs-on: self-hosted
+    runs-on: self-hosted   # your local runner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,13 +22,8 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Plan
+      - name: Run Terraform Plan
         run: terraform plan -no-color > plan.txt
-      - name: Test OpenAI API
-        run: |
-            curl -s https://api.openai.com/v1/models \
-            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}"
-
 
       - name: Ensure jq is installed
         run: |
@@ -41,54 +36,53 @@ jobs:
             fi
           fi
 
+      - name: Prepare Trimmed Plan
+        run: |
+          # Limit the plan to the first 300 lines for safe API call
+          head -n 300 plan.txt > plan_trimmed.txt
+
       - name: Generate AI Review
         run: |
-            set +e
-
-            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
+          PLAN=$(jq -Rs . < plan_trimmed.txt)
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '{
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {"role":"system","content":"You are a Terraform plan reviewer. Write a clear, human-friendly summary of infrastructure changes. Focus on resources added, changed, or destroyed, and call out risks/costs."},
-                    {"role":"user","content":"Here is the Terraform plan:\n'$(cat plan.txt)'"}
-                 ]
-            }')
+            -d "{
+              \"model\": \"gpt-4o-mini\",
+              \"messages\": [
+                {\"role\":\"system\",\"content\":\"You are a Terraform plan reviewer. Summarize infrastructure changes clearly. Group them as Adds, Changes, or Destroys, and note risks/costs.\"},
+                {\"role\":\"user\",\"content\":\"Here is the Terraform plan:\n$PLAN\"}
+              ]
+            }")
 
-            BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
-            STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+          BODY=$(echo "$RESPONSE" | sed -e '/HTTP_STATUS:/d')
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
 
-            echo "HTTP status: $STATUS"
-            echo "Raw response: $BODY"
+          echo "HTTP Status: $STATUS"
+          echo "Raw API Response: $BODY"
 
-            if [ "$STATUS" != "200" ]; then
-                echo "❌ API returned non-200. Writing error to summary.txt"
-                echo "API Error: $BODY" > summary.txt
-                exit 0
-            fi
-
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ OpenAI API call failed. Writing error to summary.txt"
+            echo "$BODY" > summary.txt
+          else
             PARSED=$(echo "$BODY" | jq -r '.choices[0].message.content' 2>/dev/null)
-
             if [ -z "$PARSED" ] || [ "$PARSED" == "null" ]; then
-                echo "⚠️ Could not parse response. Writing raw body instead."
-                echo "$BODY" > summary.txt
+              echo "⚠️ Could not parse AI response. Writing raw body instead."
+              echo "$BODY" > summary.txt
             else
-                echo "$PARSED" > summary.txt
+              echo "$PARSED" > summary.txt
             fi
+          fi
 
-
-            echo "✅ AI Review step completed"
-
-      - name: Show Plan + AI Review in GitHub Actions Summary
+      - name: Show Plan & AI Review in Job Summary
         run: |
-          echo "## Terraform Raw Plan" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat plan.txt >> $GITHUB_STEP_SUMMARY
+          echo "## Terraform Raw Plan (Trimmed)" >> $GITHUB_STEP_SUMMARY
+          echo '```hcl' >> $GITHUB_STEP_SUMMARY
+          cat plan_trimmed.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "## AI Human-Readable Review" >> $GITHUB_STEP_SUMMARY
+          echo "## AI Review (Human Readable)" >> $GITHUB_STEP_SUMMARY
           cat summary.txt >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Plan & Review as Artifact
@@ -97,4 +91,5 @@ jobs:
           name: terraform-review
           path: |
             plan.txt
+            plan_trimmed.txt
             summary.txt

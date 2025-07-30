@@ -44,8 +44,23 @@ jobs:
                     }' | jq -r '.choices[0].message.content')
                 echo "$SUMMARY" > summary.txt
 
-            - name: Post AI Review as sticky comment
-              uses: marocchino/sticky-pull-request-comment@v2
+            # - name: Post AI Review as sticky comment
+            #   uses: marocchino/sticky-pull-request-comment@v2
+            #   with:
+            #     header: "AI Review"
+            #     path: summary.txt
+            - name: Show AI Review in GitHub Actions Summary
+              run: |
+                echo "## Terraform Plan" >> $GITHUB_STEP_SUMMARY
+                cat plan.txt >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "## AI Review" >> $GITHUB_STEP_SUMMARY
+                cat summary.txt >> $GITHUB_STEP_SUMMARY
+
+            - name: Upload Plan & Review as Artifact
+              uses: actions/upload-artifact@v4
               with:
-                header: "AI Review"
-                path: summary.txt
+                name: terraform-review
+                path: |
+                  plan.txt
+                  summary.txt

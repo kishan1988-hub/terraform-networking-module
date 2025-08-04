@@ -74,19 +74,9 @@ jobs:
           head -20 README.md
 
 
-      - name: Create Pull Request (adds/updates README.md)
+      - name: Notify for manual PR
         if: steps.check_readme.outputs.generate == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Auto-generate README.md"
-          title: "Auto-generate README.md"
-          body: |
-            This PR adds a generated README.md file.
+        run: |
+          echo "README.md has been generated and pushed to branch: auto-readme-$(date +%s)"
+          echo "Please visit your repository and create a pull request from this branch to main."
 
-            ## Preview
-            ```markdown
-            $(head -30 README.md)
-            ```
-          branch: auto-readme-${{ github.run_id }}
-          base: main

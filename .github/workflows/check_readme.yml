@@ -59,4 +59,18 @@ jobs:
             }" | jq -r '.choices[0].message.content')
 
           echo "$RESPONSE" > README.md
+      - name: Show generated README.md in logs
+        if: steps.check.outputs.empty == 'true'
+        run: |
+          echo "===== Generated README.md ====="
+          cat README.md
+          echo "================================"
 
+      - name: Commit README.md if generated
+        if: steps.check.outputs.empty == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Auto-generate README.md"
+          git push

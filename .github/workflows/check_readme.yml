@@ -29,20 +29,24 @@ jobs:
         if: steps.check.outputs.empty == 'true'
         run: |
           echo "Generating README.md ..."
-          # Collect repo info
-          FILES=$(ls -1 | grep -v README.md | head -20) # list top 20 files
-          CONTEXT=$(find . -maxdepth 1 -type f -name "*.py" -o -name "*.sh" -o -name "*.tf" | head -5 | xargs cat)
           
-          # Create prompt
+          FILES=$(ls -1 | grep -v README.md | head -20)
+          CONTEXT=$(find . -maxdepth 1 -type f -name "*.py" -o -name "*.sh" -o -name "*.tf" | head -5 | xargs cat)
+
           PROMPT="Generate a README.md explaining this project.
-          Files: $FILES
-          Code Sample: 
+
+          Files:
+          $FILES
+
+          Code Sample:
           $CONTEXT"
 
-          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+          RESPONSE=$(jq -Rs . <<<"$PROMPT" | xargs -0 -I{} curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -d "{
               \"model\": \"gpt-4o-mini\",
-              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]
-            }"
+              \"messages\": [{\"role\": \"user\", \"content\": {}}]
+            }" | jq -r '.choices[0].message.content')
+
+          echo "$RESPONSE" > README.md

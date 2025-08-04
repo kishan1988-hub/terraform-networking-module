@@ -105,6 +105,14 @@ jobs:
           echo "===== Generated README.md ====="
           cat README.md
           echo "================================"
+      - name: Debug - Show README.md status
+        if: steps.check.outputs.empty == 'true'
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -l
+          cat README.md
+          git status
+
 
       - name: Create branch and commit changes
         if: steps.check.outputs.empty == 'true'

@@ -78,12 +78,17 @@ jobs:
           BRANCH="auto-readme-$(date +%s)"
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Force Git to use the GITHUB_TOKEN instead of your account
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
           git checkout -b $BRANCH
           git add README.md
           git commit -m "Auto-generate README.md"
           git push origin $BRANCH
 
           echo "branch=$BRANCH" >> $GITHUB_ENV
+
 
       - name: Create Pull Request
         if: steps.check.outputs.empty == 'true'

@@ -24,29 +24,39 @@ jobs:
           else
             echo "empty=true" >> $GITHUB_OUTPUT
           fi
-
       - name: Generate README if missing or empty
         if: steps.check.outputs.empty == 'true'
         run: |
           echo "Generating README.md ..."
-          
+
+          # Limit the number and size of files for context
           FILES=$(ls -1 | grep -v README.md | head -20)
-          CONTEXT=$(find . -maxdepth 1 -type f -name "*.py" -o -name "*.sh" -o -name "*.tf" | head -5 | xargs cat)
+
+          # Collect up to 5 code files (safe cat loop, avoids ARG_MAX)
+          CONTEXT=""
+          for f in $(find . -maxdepth 1 -type f \( -name "*.py" -o -name "*.sh" -o -name "*.tf" \) | head -5); do
+            echo "Including $f in context"
+            CONTEXT="$CONTEXT\n\n--- File: $f ---\n$(head -c 3000 "$f")"
+          done
 
           PROMPT="Generate a README.md explaining this project.
 
           Files:
           $FILES
 
-          Code Sample:
+          Code Samples:
           $CONTEXT"
 
-          RESPONSE=$(jq -Rs . <<<"$PROMPT" | xargs -0 -I{} curl -s https://api.openai.com/v1/chat/completions \
+          # Encode prompt safely into JSON
+          JSON_PROMPT=$(jq -Rs . <<<"$PROMPT")
+
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -d "{
               \"model\": \"gpt-4o-mini\",
-              \"messages\": [{\"role\": \"user\", \"content\": {}}]
+              \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]
             }" | jq -r '.choices[0].message.content')
 
           echo "$RESPONSE" > README.md
+

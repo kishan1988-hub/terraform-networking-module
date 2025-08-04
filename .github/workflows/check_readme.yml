@@ -1,0 +1,48 @@
+name: Ensure README.md Exists and Has Content
+
+on:
+  workflow_dispatch:
+
+
+jobs:
+  check-readme:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if README.md exists
+        id: check
+        run: |
+          if [ -f "README.md" ]; then
+            if [ ! -s "README.md" ]; then
+              echo "empty=true" >> $GITHUB_OUTPUT
+            else
+              echo "empty=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "empty=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate README if missing or empty
+        if: steps.check.outputs.empty == 'true'
+        run: |
+          echo "Generating README.md ..."
+          # Collect repo info
+          FILES=$(ls -1 | grep -v README.md | head -20) # list top 20 files
+          CONTEXT=$(find . -maxdepth 1 -type f -name "*.py" -o -name "*.sh" -o -name "*.tf" | head -5 | xargs cat)
+          
+          # Create prompt
+          PROMPT="Generate a README.md explaining this project.
+          Files: $FILES
+          Code Sample: 
+          $CONTEXT"
+
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+            -d "{
+              \"model\": \"gpt-4o-mini\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]
+            }"

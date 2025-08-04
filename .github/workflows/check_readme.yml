@@ -3,6 +3,9 @@ name: Ensure README.md Exists and Has Content
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write   # allow commits back to the repo   
+
 
 jobs:
   check-readme:
@@ -11,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Check if README.md exists
         id: check

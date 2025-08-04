@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # allow commits back to the repo   
+  contents: write   # allow commits back to the repo 
+  pull-requests: write # allows PR to be created  
 
 
 jobs:
@@ -71,11 +72,26 @@ jobs:
           cat README.md
           echo "================================"
 
-      - name: Commit README.md if generated
+      - name: Create branch and commit changes
         if: steps.check.outputs.empty == 'true'
         run: |
+          BRANCH="auto-readme-$(date +%s)"
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b $BRANCH
           git add README.md
-          git commit -m "Auto-generate README.md" || echo "No changes to commit"
-          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          git commit -m "Auto-generate README.md"
+          git push origin $BRANCH
+
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create Pull Request
+        if: steps.check.outputs.empty == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Auto-generate README.md"
+          branch: ${{ env.branch }}
+          title: "Auto-generate README.md"
+          body: "This PR adds a generated README.md file."
+          base: main

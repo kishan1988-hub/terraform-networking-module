@@ -74,9 +74,10 @@ jobs:
           head -20 README.md
 
 
-      - name: Notify for manual PR
+      - name: Notify in job summary for manual PR
         if: steps.check_readme.outputs.generate == 'true'
         run: |
-          echo "README.md has been generated and pushed to branch: auto-readme-$(date +%s)"
-          echo "Please visit your repository and create a pull request from this branch to main."
-
+          BRANCH="auto-readme-$(date +%s)"
+          echo "README.md has been generated and pushed to branch: \`$BRANCH\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "➡️ [Create a Pull Request from this branch to main in your repository](https://github.com/${{ github.repository }}/compare/main...$BRANCH)" >> $GITHUB_STEP_SUMMARY

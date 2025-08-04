@@ -79,8 +79,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Force Git to use the GITHUB_TOKEN instead of your account
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          # Force Git to use the PAT_TOKEN instead of your account
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
 
           git checkout -b $BRANCH
           git add README.md
@@ -94,7 +94,7 @@ jobs:
         if: steps.check.outputs.empty == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
           commit-message: "Auto-generate README.md"
           branch: ${{ env.branch }}
           title: "Auto-generate README.md"
